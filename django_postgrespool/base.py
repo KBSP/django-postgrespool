@@ -29,7 +29,6 @@ def _log(message, *args):
 
 # Only hook up the listeners if we are in debug mode.
 if settings.DEBUG:
-    event.listen(QueuePool, 'checkout', partial(_log, 'retrieved from pool'))
     event.listen(QueuePool, 'checkin', partial(_log, 'returned to pool'))
     event.listen(QueuePool, 'connect', partial(_log, 'new connection'))
 
