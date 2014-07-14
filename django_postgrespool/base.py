@@ -5,6 +5,7 @@ from functools import partial
 
 from sqlalchemy import event
 from sqlalchemy.pool import manage, QueuePool
+from sqlalchemy import exc
 from psycopg2 import InterfaceError, ProgrammingError, OperationalError
 
 from django.conf import settings
@@ -14,6 +15,7 @@ from django.db.backends.postgresql_psycopg2.base import CursorWrapper as DjangoC
 from django.db.backends.postgresql_psycopg2.creation import DatabaseCreation as Psycopg2DatabaseCreation
 
 POOL_SETTINGS = 'DATABASE_POOL_ARGS'
+POOL_PESSIMISTIC = getattr(settings, "DATABASE_POOL_PESSIMISTIC", False)
 
 # DATABASE_POOL_ARGS should be something like:
 # {'max_overflow':10, 'pool_size':5, 'recycle':300}
@@ -27,10 +29,24 @@ def _log(message, *args):
 
 # Only hook up the listeners if we are in debug mode.
 if settings.DEBUG:
-    event.listen(QueuePool, 'checkout', partial(_log, 'retrieved from pool'))
     event.listen(QueuePool, 'checkin', partial(_log, 'returned to pool'))
     event.listen(QueuePool, 'connect', partial(_log, 'new connection'))
 
+@event.listens_for(QueuePool, "checkout")
+def _on_checkout(connection, record, proxy):
+    if POOL_PESSIMISTIC:
+        cursor = connection.cursor()
+        try:
+            cursor.execute("SELECT 1")
+        except:
+            # This error is raised and consumed internally by a connection pool. 
+            # It can be raised by the PoolEvents.checkout() event so that the 
+            # host pool forces a retry; the exception will be caught three times 
+            # in a row before the pool gives up and raises InvalidRequestError 
+            # regarding the connection attempt.
+            raise exc.DisconnectionError()
+        finally:
+            cursor.close()
 
 def is_disconnect(e, connection, cursor):
     """
