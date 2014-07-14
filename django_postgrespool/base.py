@@ -4,7 +4,7 @@ import logging
 from functools import partial
 
 from sqlalchemy import event
-from sqlalchemy.pool import manage, QueuePool, Pool
+from sqlalchemy.pool import manage, QueuePool
 from sqlalchemy import exc
 from psycopg2 import InterfaceError, ProgrammingError, OperationalError
 
@@ -33,7 +33,7 @@ if settings.DEBUG:
     event.listen(QueuePool, 'checkin', partial(_log, 'returned to pool'))
     event.listen(QueuePool, 'connect', partial(_log, 'new connection'))
 
-@event.listens_for(Pool, "checkout")
+@event.listens_for(QueuePool, "checkout")
 def _on_checkout(connection, record, proxy):
     if POOL_PESSIMISTIC:
         cursor = connection.cursor()
